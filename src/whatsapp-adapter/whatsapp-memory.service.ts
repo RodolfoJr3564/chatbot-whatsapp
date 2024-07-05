@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common"
-import { makeInMemoryStore, WASocket } from "@whiskeysockets/baileys"
+import { WASocket, proto, Contact as WAContact } from "@whiskeysockets/baileys"
 import { InjectModel } from "@nestjs/mongoose"
 import { Model } from "mongoose"
 import { Chat as ChatModel, ChatDocument } from "./schemas/chat.schema"
@@ -12,7 +12,6 @@ import {
 @Injectable()
 export class WhatsappMemoryService {
   private readonly logger = new Logger(WhatsappMemoryService.name)
-  public store: ReturnType<typeof makeInMemoryStore>
 
   constructor(
     @InjectModel(ChatModel.name) private chatModel: Model<ChatDocument>,
@@ -21,98 +20,135 @@ export class WhatsappMemoryService {
     private contactModel: Model<ContactDocument>,
   ) {}
 
-  async initMemoryStore(sock: WASocket) {
-    this.store = makeInMemoryStore({})
-    this.store.readFromFile("./baileys_store.json")
-    setInterval(() => {
-      this.store.writeToFile("./baileys_store.json")
-      this.logger.log("Memory store written to file.")
-    }, 60 * 1000)
-    this.store.bind(sock.ev)
-    this.logger.log("Memory store initialized and bound to socket events.")
-
+  async init(sock: WASocket) {
     sock.ev.on(
       "messaging-history.set",
       async ({ chats = [], contacts = [], messages = [] }) => {
-        const messagesDocs = new Map<string, MessageDocument>()
-        if (messages.length) {
-          messages.forEach(message => {
-            messagesDocs.set(
-              message.key.remoteJid,
-              new this.messageModel({
-                key: message.key,
-                message: message.message,
-                messageTimestamp: message.messageTimestamp,
-              }),
-            )
-          })
-        }
-
-        const contactDocs = contacts.map(
-          contact => new this.contactModel(contact),
-        )
-
-        const savePromises = chats.map(async chat => {
-          const messages = chat.messages.map(msg =>
-            messagesDocs.get(msg.message.key.remoteJid),
-          )
-          const contact =
-            contactDocs.find(contact => contact.id === chat.id) ||
-            new this.contactModel({
-              id: chat.id,
-              name: chat.messages[0].message.key.fromMe,
-            })
-
-          const chatDocument = await this.chatModel.findOne({ id: chat.id })
-          chatDocument.messages.find
-          return new this.chatModel({
-            ...chat,
-            messages: messages,
-            contact: contact,
-          }).save()
-        })
-
-        /* await this.persistMessagingHistory(chatDocs, contactDocs) */
-
-        this.logger.log(
-          `Synced ${chats.length} chats and ${contacts.length} contacts`,
-        )
-
-        this.logger.log("Finished sync of messaging history.")
+        await this.processChats(chats)
+        await this.processContacts(contacts)
+        await this.processMessages(messages)
       },
     )
+
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+      await this.processMessages(messages)
+    })
+
+    sock.ev.on("contacts.upsert", async contacts => {
+      await this.processContacts(contacts)
+    })
+
+    sock.ev.on("chats.upsert", async chats => {
+      await this.processChats(chats)
+    })
+
+    sock.ev.on("messages.update", async updates => {
+      this.logger.log(`Updating ${updates.length} messages`)
+      /* for (const { update, key } of updates) {
+        await this.messageModel
+          .updateOne({ id: key.id }, { $set: update })
+          .exec()
+      } */
+    })
+
+    sock.ev.on("messages.delete", async item => {
+      this.logger.log(`Deleting ${item} messages`)
+      /* if ("all" in item) {
+        await this.messageModel.deleteMany({ "key.remoteJid": item.jid }).exec()
+      } else {
+        await this.messageModel
+          .deleteMany({ id: { $in: item.keys.map(k => k.id) } })
+          .exec()
+      } */
+    })
+
+    sock.ev.on("chats.update", async updates => {
+      this.logger.log(`Updating ${updates.length} chats`)
+      /* for (const update of updates) {
+        await this.chatModel
+          .updateOne({ id: update.id }, { $set: update })
+          .exec()
+      } */
+    })
+
+    sock.ev.on("chats.delete", async deletions => {
+      this.logger.log(`Deleting ${deletions.length} chats`)
+      /* await this.chatModel.deleteMany({ id: { $in: deletions } }).exec() */
+    })
+
+    sock.ev.on("contacts.update", async updates => {
+      this.logger.log(`Updating ${updates.length} contacts`)
+      /* for (const update of updates) {
+        await this.contactModel
+          .updateOne({ id: update.id }, { $set: update })
+          .exec()
+      } */
+    })
   }
 
-  private async persistMessagingHistory(
-    chatDocs: ChatDocument[],
-    contactDocs: ContactDocument[],
-  ) {
+  private async processChats(chats: proto.IConversation[]) {
+    this.logger.log(`Processing ${chats.length} chats`)
+    /* const chatDocs = chats.map(
+      chat =>
+        new this.chatModel({
+          id: chat.id,
+          contact_id: chat.id,
+          archived: chat.archived,
+          description: chat.description,
+          lastMsgTimestamp: chat.lastMsgTimestamp,
+        }),
+    )
+
     if (chatDocs.length) {
       await this.chatModel.bulkWrite(
-        chatDocs.map(chat => {
-          return {
-            updateOne: {
-              filter: { id: chat.id },
-              update: { $set: chat },
-              upsert: true,
-            },
-          }
-        }),
+        chatDocs.map(chat => ({
+          updateOne: {
+            filter: { id: chat.id },
+            update: { $set: chat },
+            upsert: true,
+          },
+        })),
       )
-    }
+    } */
+  }
 
-    /*     if (contactDocs.length) {
+  private async processContacts(contacts: WAContact[]) {
+    this.logger.log(`Processing ${contacts.length} contacts`)
+    /* const contactDocs = contacts.map(contact => new this.contactModel(contact))
+
+    if (contactDocs.length) {
       await this.contactModel.bulkWrite(
-        contactDocs.map(contact => {
-          return {
-            updateOne: {
-              filter: { id: contact.id },
-              update: { $set: contact },
-              upsert: true,
-            },
-          }
-        }),
+        contactDocs.map(contact => ({
+          updateOne: {
+            filter: { id: contact.id },
+            update: { $set: contact },
+            upsert: true,
+          },
+        })),
       )
+    } */
+  }
+
+  private async processMessages(messages: proto.IWebMessageInfo[]) {
+    this.logger.log(`Processing ${messages.length} messages`)
+    /* const messageDocs = messages.map(message => ({
+      updateOne: {
+        filter: { id: message.key.id },
+        update: {
+          $set: {
+            id: message.key.id,
+            key: message.key,
+            message: message.message,
+            chat_id: message.key.remoteJid,
+            messageTimestamp: message.messageTimestamp,
+          },
+        },
+        upsert: true,
+      },
+    }))
+
+    if (messageDocs.length) {
+      await this.messageModel.bulkWrite(messageDocs)
     } */
   }
 }
