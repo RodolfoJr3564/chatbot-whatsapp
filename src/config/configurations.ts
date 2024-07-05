@@ -13,5 +13,6 @@ export default (): AppConfig => ({
     url: process.env.LANGFLOW_URL,
     apiKey: process.env.LANGFLOW_API_KEY,
     stream: process.env.LANGFLOW_STREAM === "true",
+    mainFlowId: process.env.LANGFLOW_FLOW_ID,
   },
 })

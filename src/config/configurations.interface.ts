@@ -10,6 +10,7 @@ export interface LangFlowConfig {
   url: string
   apiKey: string
   stream: boolean
+  mainFlowId: string
 }
 
 export interface AppConfig {

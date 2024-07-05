@@ -10,6 +10,8 @@ import { MongooseModule } from "@nestjs/mongoose"
 import { Contact, ContactSchema } from "whatsapp-adapter/schemas/contact.schema"
 import { Chat, ChatSchema } from "whatsapp-adapter/schemas/chat.schema"
 import { Message, MessageSchema } from "whatsapp-adapter/schemas/message.schema"
+import { LangflowService } from "./langflow.service"
+import { WhatsappMessageService } from "./whatsapp-message.service"
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { Message, MessageSchema } from "whatsapp-adapter/schemas/message.schema"
     WhatsappMessageHandlerService,
     WhatsappMemoryService,
     WhatsappChatService,
+    WhatsappMessageService,
+    LangflowService,
   ],
 })
 export class WhatsappAdapterModule {}
