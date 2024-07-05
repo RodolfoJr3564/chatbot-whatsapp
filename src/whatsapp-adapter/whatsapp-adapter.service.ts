@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common"
 import { WhatsappConnectService } from "./whatsapp-connect.service"
 import { WhatsappMessageHandlerService } from "./whatsapp-message-handler.service"
-import { WhatsappMemoryService } from "./whatsapp-memory-stream.service"
+import { WhatsappMemoryService } from "./whatsapp-memory.service"
 
 @Injectable()
 export class WhatsappAdapterService implements OnModuleInit {
